@@ -72,22 +72,10 @@ archive.pipe(output)
 
 let archiveSourceDir = distDir
 if (target === 'firefox') {
-  // Firefox can have MV3 service workers disabled for temporary add-ons.
-  // Workaround: package a manifest that uses background.scripts pointing at
-  // the generated service worker loader.
+  // Cópia isolada para o .xpi (manifest já vem com scripts + service_worker do build).
   fs.rmSync(tmpDir, { recursive: true, force: true })
   ensureDir(tmpDir)
   fs.cpSync(distDir, tmpDir, { recursive: true })
-
-  const mfPath = path.join(tmpDir, 'manifest.json')
-  const mf = readJson(mfPath)
-  const sw = mf?.background?.service_worker
-  if (typeof sw === 'string' && sw.length > 0) {
-    mf.background = { scripts: [sw] }
-    delete mf.background.service_worker
-    delete mf.background.type
-    writeJson(mfPath, mf)
-  }
   archiveSourceDir = tmpDir
 }
 

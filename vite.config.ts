@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+import fs from 'node:fs'
 import path from 'node:path'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
@@ -46,9 +47,34 @@ const rssDevProxyPlugin: Plugin = {
   },
 }
 
+/**
+ * AMO / addons-linter exige `background.scripts` como fallback quando existe
+ * `service_worker` (Firefox). O Chrome 121+ ignora `scripts`.
+ * @see https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background
+ */
+function dualBackgroundForMozilla(): Plugin {
+  return {
+    name: 'dual-background-firefox-amo',
+    writeBundle(options) {
+      const outDir = options.dir ?? path.resolve('dist')
+      const manifestPath = path.join(outDir, 'manifest.json')
+      if (!fs.existsSync(manifestPath)) return
+      const raw = fs.readFileSync(manifestPath, 'utf-8')
+      const m = JSON.parse(raw) as {
+        background?: { service_worker?: string; scripts?: string[]; type?: string }
+      }
+      const sw = m.background?.service_worker
+      if (typeof sw === 'string' && sw.length > 0 && !m.background?.scripts?.length) {
+        m.background = { ...m.background, scripts: [sw], service_worker: sw, type: m.background?.type }
+        fs.writeFileSync(manifestPath, `${JSON.stringify(m, null, 2)}\n`, 'utf-8')
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [rssDevProxyPlugin, tailwindcss(), vue(), crx({ manifest })],
+  plugins: [rssDevProxyPlugin, tailwindcss(), vue(), crx({ manifest }), dualBackgroundForMozilla()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
