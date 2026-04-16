@@ -16,6 +16,7 @@ dist-ssr
 *.crx
 news.json
 release/
+.tmp-release
 
 # Editor directories and files
 .vscode/*

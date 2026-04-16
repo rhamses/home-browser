@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import {
   hasYoutubeApiKey,
   loadLatestPlaylistVideo,
@@ -15,12 +15,6 @@ const error = ref<string | null>(null)
 const video = ref<YoutubeLatestVideo | null>(null)
 const needsKey = ref(false)
 const fromCache = ref(false)
-
-const embedSrc = computed(() =>
-  video.value
-    ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.value.videoId)}`
-    : '',
-)
 
 onMounted(async () => {
   loading.value = true
@@ -81,14 +75,31 @@ onMounted(async () => {
     </p>
 
     <template v-else-if="video">
-      <div
-        class="mt-2 overflow-hidden rounded-lg border border-zinc-200/80 bg-black shadow-inner dark:border-zinc-700/80">
+      <a
+        :href="video.watchUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="mt-2 block overflow-hidden rounded-lg border border-zinc-200/80 bg-black shadow-inner outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:border-zinc-700/80 dark:focus-visible:ring-offset-zinc-950"
+        :title="`Abrir no YouTube: ${video.title}`"
+      >
         <div class="relative aspect-video w-full">
-          <iframe :src="embedSrc" class="absolute inset-0 h-full w-full border-0" :title="`Reproduzir: ${video.title}`"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowfullscreen referrerpolicy="strict-origin-when-cross-origin" />
+          <img
+            v-if="video.thumbnailUrl"
+            :src="video.thumbnailUrl"
+            :alt="video.title"
+            class="absolute inset-0 h-full w-full object-cover"
+            loading="lazy"
+            decoding="async"
+            referrerpolicy="no-referrer"
+          />
+          <div
+            v-else
+            class="absolute inset-0 flex items-center justify-center bg-zinc-900/70 text-xs font-medium text-zinc-200"
+          >
+            Thumbnail indisponível
+          </div>
         </div>
-      </div>
+      </a>
       <div class="mt-2">
         <p class="line-clamp-2 text-xs font-medium leading-snug text-zinc-900 dark:text-white">
           {{ video.title }}

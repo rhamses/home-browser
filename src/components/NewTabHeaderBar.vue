@@ -22,7 +22,10 @@ const emit = defineEmits<{
   'add-custom-feed': [payload: { name: string; feedUrl: string }]
   'add-extra-category-feed': [payload: { slug: string; feedUrl: string }]
   'sync-news-categories': []
+  'open-manage-categories': []
+  'open-manage-widgets': []
   'open-category-order': []
+  'clear-app-cache': []
   'export-home-browser-data': []
   'import-home-browser-data': [payload: { text: string }]
   'clear-local-favorites': []
@@ -115,12 +118,36 @@ function openCategoryOrderDialog() {
   emit('open-category-order')
 }
 
+function openManageCategoriesDialog() {
+  addFavoritePanelOpen.value = false
+  addNewCategoryPanelOpen.value = false
+  addExtraFeedPanelOpen.value = false
+  menuOpen.value = false
+  emit('open-manage-categories')
+}
+
+function openManageWidgetsDialog() {
+  addFavoritePanelOpen.value = false
+  addNewCategoryPanelOpen.value = false
+  addExtraFeedPanelOpen.value = false
+  menuOpen.value = false
+  emit('open-manage-widgets')
+}
+
 function triggerExportData() {
   addFavoritePanelOpen.value = false
   addNewCategoryPanelOpen.value = false
   addExtraFeedPanelOpen.value = false
   menuOpen.value = false
   emit('export-home-browser-data')
+}
+
+function clearAppCache() {
+  addFavoritePanelOpen.value = false
+  addNewCategoryPanelOpen.value = false
+  addExtraFeedPanelOpen.value = false
+  menuOpen.value = false
+  emit('clear-app-cache')
 }
 
 function triggerImportData() {
@@ -346,6 +373,77 @@ onUnmounted(() => {
             />
           </svg>
           Ordene categorias
+        </button>
+        <button
+          type="button"
+          class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-zinc-800 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          role="menuitem"
+          @click="openManageCategoriesDialog"
+        >
+          <svg
+            class="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
+          Gerencie Categorias
+        </button>
+        <button
+          type="button"
+          class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-zinc-800 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          role="menuitem"
+          @click="openManageWidgetsDialog"
+        >
+          <svg
+            class="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7z"
+            />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M19.4 15a7.9 7.9 0 0 0 .1-1 7.9 7.9 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8.2 8.2 0 0 0-1.7-1l-.3-2.6H9l-.3 2.6a8.2 8.2 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 13a7.9 7.9 0 0 0-.1 1 7.9 7.9 0 0 0 .1 1l-2 1.5 2 3.4 2.4-1a8.2 8.2 0 0 0 1.7 1l.3 2.6h6l.3-2.6a8.2 8.2 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5z"
+            />
+          </svg>
+          Gerenciar Widgets
+        </button>
+        <button
+          type="button"
+          class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-zinc-800 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          role="menuitem"
+          @click="clearAppCache"
+        >
+          <svg
+            class="h-4 w-4 shrink-0 text-zinc-600 dark:text-zinc-300"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M3 6h18M8 6V4h8v2m-1 0l-1 14H10L9 6"
+            />
+          </svg>
+          Limpar cache
         </button>
         <button
           type="button"

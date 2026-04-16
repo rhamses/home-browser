@@ -6,6 +6,8 @@ import NewTabHeaderBar from './components/NewTabHeaderBar.vue'
 import NewTabUnsplashFooter from './components/NewTabUnsplashFooter.vue'
 import HomeBrowserMainTabs from './components/HomeBrowserMainTabs.vue'
 import NewsCategoryOrderDialog from './components/NewsCategoryOrderDialog.vue'
+import ManageCategoriesDialog from './components/ManageCategoriesDialog.vue'
+import ManageWidgetsDialog from './components/ManageWidgetsDialog.vue'
 import { loadBookmarksBarLinks, type FavoriteLink } from './lib/bookmarksBar'
 import {
   addCustomFeed,
@@ -18,8 +20,20 @@ import {
   removeExtraCategoryFeedsMatching,
 } from './lib/extraCategoryFeeds'
 import { suppressFeedUrl } from './lib/suppressedFeedUrls'
+import { replaceSuppressedFeedUrls } from './lib/suppressedFeedUrls'
 import { saveCategoryOrder } from './lib/newsCategoryOrder'
 import { persistCategoryDeletions } from './lib/newsCategoryRemoved'
+import {
+  loadSelectedNewsFeeds,
+  replaceSelectedNewsFeeds,
+  type SelectedFeedEntry,
+} from './lib/selectedNewsFeeds'
+import { loadNewsFeedsConfig, type NewsFeedsSchema } from './lib/newsFeeds'
+import {
+  loadWidgetsConfig,
+  saveWidgetsConfig,
+  type WidgetsConfig,
+} from './lib/widgetConfig'
 import {
   loadLocalFavorites,
   newLocalFavoriteId,
@@ -74,6 +88,15 @@ const categoryOrderItems = ref<OrderableCategoryRow[]>([])
 /** Slugs presentes ao abrir o diálogo (para calcular remoções ao guardar). */
 const categoryOrderInitialSlugs = ref<string[]>([])
 const headerNewsCategories = ref<{ slug: string; name: string }[]>([])
+
+const manageCategoriesOpen = ref(false)
+const manageCatalog = ref<NewsFeedsSchema | null>(null)
+const manageInitialSelected = ref<SelectedFeedEntry[]>([])
+const manageLoading = ref(false)
+const manageError = ref<string | null>(null)
+
+const manageWidgetsOpen = ref(false)
+const manageWidgetsInitial = ref<WidgetsConfig>(loadWidgetsConfig())
 
 const displayedFavorites = computed(() => [
   ...localFavorites.value,
@@ -143,6 +166,39 @@ function onOpenCategoryOrder() {
   categoryOrderDialogOpen.value = true
 }
 
+async function onOpenManageCategories() {
+  manageCategoriesOpen.value = true
+  manageLoading.value = true
+  manageError.value = null
+  manageCatalog.value = null
+  manageInitialSelected.value = loadSelectedNewsFeeds()
+  try {
+    manageCatalog.value = await loadNewsFeedsConfig()
+  } catch (e) {
+    manageError.value =
+      e instanceof Error ? e.message : 'Erro ao carregar catálogo de feeds'
+  } finally {
+    manageLoading.value = false
+  }
+}
+
+function onSaveManageCategories(entries: SelectedFeedEntry[]) {
+  replaceSelectedNewsFeeds(entries)
+  // Reseta suprimidos de feeds-base, para alinhar com a nova seleção.
+  replaceSuppressedFeedUrls([])
+  void homeTabsRef.value?.reloadFeedsConfig?.()
+}
+
+function onOpenManageWidgets() {
+  manageWidgetsInitial.value = loadWidgetsConfig()
+  manageWidgetsOpen.value = true
+}
+
+function onSaveManageWidgets(cfg: WidgetsConfig) {
+  saveWidgetsConfig(cfg)
+  void homeTabsRef.value?.reloadFeedsConfig?.()
+}
+
 async function refreshCategoryOrderItemsFromTabs(selectSlug?: string) {
   await homeTabsRef.value?.reloadFeedsConfig?.(selectSlug)
   if (categoryOrderDialogOpen.value) {
@@ -207,6 +263,36 @@ function onImportHomeBrowserData(payload: { text: string }) {
     })
 }
 
+function onClearAppCache() {
+  try {
+    localStorage.removeItem('home-browser-unsplash-nature-cache')
+    localStorage.removeItem('home-browser-weather-cache:v1')
+    localStorage.removeItem('home-browser-geo-coords-cache:v1')
+    localStorage.removeItem('home-browser-geo-denied-at:v1')
+  } catch {
+    /* ignore */
+  }
+
+  // Recarrega foto e tempo (sem bloquear UI).
+  void loadNaturePhotoWithCache()
+    .then((p) => {
+      naturePhoto.value = p
+      photoError.value = !p
+    })
+    .catch(() => {
+      photoError.value = true
+    })
+
+  void loadLocationWeatherBundle()
+    .then((weatherBundle) => {
+      locationWeather.value = weatherBundle.summary
+      weatherDetail.value = weatherBundle.detail
+    })
+    .catch(() => {
+      // mantém placeholders
+    })
+}
+
 function removeLocalFavorite(id: string) {
   localFavorites.value = localFavorites.value.filter((x) => x.id !== id)
   persistLocalFavorites()
@@ -224,14 +310,27 @@ const bgStyle = computed(() =>
 )
 
 onMounted(async () => {
-  const [photo, weatherBundle] = await Promise.all([
-    loadNaturePhotoWithCache().catch(() => null),
-    loadLocationWeatherBundle(),
-  ])
-  if (!photo) photoError.value = true
-  naturePhoto.value = photo
-  locationWeather.value = weatherBundle.summary
-  weatherDetail.value = weatherBundle.detail
+  void loadNaturePhotoWithCache()
+    .then((photo) => {
+      if (!photo) {
+        photoError.value = true
+        return
+      }
+      photoError.value = false
+      naturePhoto.value = photo
+    })
+    .catch(() => {
+      photoError.value = true
+    })
+
+  void loadLocationWeatherBundle()
+    .then((weatherBundle) => {
+      locationWeather.value = weatherBundle.summary
+      weatherDetail.value = weatherBundle.detail
+    })
+    .catch(() => {
+      // mantém placeholders; não bloqueia a UI
+    })
 
   bookmarkBarLinks.value = await loadBookmarksBarLinks()
   chrome.bookmarks.onCreated.addListener(scheduleFavoritesRefresh)
@@ -264,6 +363,9 @@ onUnmounted(() => {
         @toggle-dark="toggleTheme" @add-favorite="onAddFavoriteFromHeader"
         @add-custom-feed="onAddCustomFeed" @sync-news-categories="onSyncNewsCategories"
         @add-extra-category-feed="onAddExtraCategoryFeed" @open-category-order="onOpenCategoryOrder"
+        @open-manage-categories="onOpenManageCategories"
+        @open-manage-widgets="onOpenManageWidgets"
+        @clear-app-cache="onClearAppCache"
         @export-home-browser-data="onExportHomeBrowserData" @import-home-browser-data="onImportHomeBrowserData"
         @clear-local-favorites="clearLocalFavorites" />
 
@@ -272,6 +374,21 @@ onUnmounted(() => {
         :items="categoryOrderItems"
         @save="onSaveCategoryOrder"
         @remove-category-feed="onRemoveCategoryFeed"
+      />
+
+      <ManageCategoriesDialog
+        v-model:open="manageCategoriesOpen"
+        :catalog="manageCatalog"
+        :initial-selected="manageInitialSelected"
+        :loading="manageLoading"
+        :error="manageError"
+        @save="onSaveManageCategories"
+      />
+
+      <ManageWidgetsDialog
+        v-model:open="manageWidgetsOpen"
+        :initial-config="manageWidgetsInitial"
+        @save="onSaveManageWidgets"
       />
 
       <section class="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-8 pt-10 sm:pt-14">

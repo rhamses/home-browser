@@ -5,9 +5,14 @@ import archiver from 'archiver'
 const root = process.cwd()
 const distDir = path.join(root, 'dist')
 const releaseDir = path.join(root, 'release')
+const tmpDir = path.join(root, '.tmp-release')
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+}
+
+function writeJson(filePath, value) {
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + '\n', 'utf-8')
 }
 
 function ensureDir(p) {
@@ -64,6 +69,28 @@ output.on('close', () => {
 })
 
 archive.pipe(output)
-archive.directory(distDir, false)
+
+let archiveSourceDir = distDir
+if (target === 'firefox') {
+  // Firefox can have MV3 service workers disabled for temporary add-ons.
+  // Workaround: package a manifest that uses background.scripts pointing at
+  // the generated service worker loader.
+  fs.rmSync(tmpDir, { recursive: true, force: true })
+  ensureDir(tmpDir)
+  fs.cpSync(distDir, tmpDir, { recursive: true })
+
+  const mfPath = path.join(tmpDir, 'manifest.json')
+  const mf = readJson(mfPath)
+  const sw = mf?.background?.service_worker
+  if (typeof sw === 'string' && sw.length > 0) {
+    mf.background = { scripts: [sw] }
+    delete mf.background.service_worker
+    delete mf.background.type
+    writeJson(mfPath, mf)
+  }
+  archiveSourceDir = tmpDir
+}
+
+archive.directory(archiveSourceDir, false)
 await archive.finalize()
 

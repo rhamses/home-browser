@@ -332,17 +332,91 @@ async function reverseGeocodeCity(
 
 function getCoords(): Promise<{ lat: number; lon: number }> {
   return new Promise((resolve, reject) => {
+    const COORDS_CACHE_KEY = 'home-browser-geo-coords-cache:v1'
+    const COORDS_DENIED_KEY = 'home-browser-geo-denied-at:v1'
+    const COORDS_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000 // 7 dias
+    const DENIED_BACKOFF_MS = 24 * 60 * 60 * 1000 // 24 h
+
+    function readCachedCoords(): { lat: number; lon: number } | null {
+      if (typeof localStorage === 'undefined') return null
+      const raw = localStorage.getItem(COORDS_CACHE_KEY)
+      if (!raw) return null
+      try {
+        const data = JSON.parse(raw) as unknown
+        if (data == null || typeof data !== 'object') return null
+        const o = data as Record<string, unknown>
+        const lat = typeof o.lat === 'number' ? o.lat : Number(o.lat)
+        const lon = typeof o.lon === 'number' ? o.lon : Number(o.lon)
+        const savedAt = typeof o.savedAt === 'number' ? o.savedAt : Number(o.savedAt)
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(savedAt))
+          return null
+        if (Date.now() - savedAt > COORDS_MAX_AGE_MS) return null
+        return { lat, lon }
+      } catch {
+        return null
+      }
+    }
+
+    function writeCachedCoords(lat: number, lon: number): void {
+      if (typeof localStorage === 'undefined') return
+      try {
+        localStorage.setItem(
+          COORDS_CACHE_KEY,
+          JSON.stringify({ v: 1, lat, lon, savedAt: Date.now() }),
+        )
+      } catch {
+        /* quota */
+      }
+    }
+
+    function readDeniedBackoffActive(): boolean {
+      if (typeof localStorage === 'undefined') return false
+      const raw = localStorage.getItem(COORDS_DENIED_KEY)
+      const ts = raw ? Number(raw) : NaN
+      if (!Number.isFinite(ts) || ts <= 0) return false
+      return Date.now() - ts < DENIED_BACKOFF_MS
+    }
+
+    function writeDeniedNow(): void {
+      if (typeof localStorage === 'undefined') return
+      try {
+        localStorage.setItem(COORDS_DENIED_KEY, String(Date.now()))
+      } catch {
+        /* quota */
+      }
+    }
+
+    // Se já temos coordenadas recentes, evita re-pedir permissão (Edge pode perguntar repetidamente).
+    const cached = readCachedCoords()
+    if (cached) {
+      resolve(cached)
+      return
+    }
+
+    // Se o utilizador negou recentemente, não volta a pedir nesta sessão/período.
+    if (readDeniedBackoffActive()) {
+      reject(new Error('geolocation denied (cached)'))
+      return
+    }
+
     if (!navigator.geolocation) {
       reject(new Error('no geolocation'))
       return
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-        }),
-      reject,
+      (pos) => {
+        const lat = pos.coords.latitude
+        const lon = pos.coords.longitude
+        writeCachedCoords(lat, lon)
+        resolve({ lat, lon })
+      },
+      (err) => {
+        // PERMISSION_DENIED (1) ou erros semelhantes: aplica backoff para não importunar sempre.
+        if ((err as GeolocationPositionError | undefined)?.code === 1) {
+          writeDeniedNow()
+        }
+        reject(err)
+      },
       { enableHighAccuracy: false, maximumAge: 600_000, timeout: 12_000 },
     )
   })
@@ -375,17 +449,58 @@ export type LocationWeatherBundle = {
  * Uma chamada à API — use isto na nova aba para alimentar o cabeçalho e o widget de tempo.
  */
 export async function loadLocationWeatherBundle(): Promise<LocationWeatherBundle> {
+  const WEATHER_CACHE_KEY = 'home-browser-weather-cache:v1'
+  const WEATHER_TTL_MS = 30 * 60 * 1000
+
+  function readCached(): LocationWeatherBundle | null {
+    if (typeof localStorage === 'undefined') return null
+    const raw = localStorage.getItem(WEATHER_CACHE_KEY)
+    if (!raw) return null
+    try {
+      const data = JSON.parse(raw) as unknown
+      if (data == null || typeof data !== 'object') return null
+      const o = data as Record<string, unknown>
+      const fetchedAt = typeof o.fetchedAt === 'number' ? o.fetchedAt : Number(o.fetchedAt)
+      if (!Number.isFinite(fetchedAt) || Date.now() - fetchedAt > WEATHER_TTL_MS) return null
+      const summary = o.summary as LocationWeather | undefined
+      const detail = o.detail as DetailedWeather | undefined
+      if (!summary || !detail) return null
+      return { summary, detail }
+    } catch {
+      return null
+    }
+  }
+
+  function writeCached(bundle: LocationWeatherBundle): void {
+    if (typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem(
+        WEATHER_CACHE_KEY,
+        JSON.stringify({ v: 1, fetchedAt: Date.now(), ...bundle }),
+      )
+    } catch {
+      /* quota */
+    }
+  }
+
+  const cached = readCached()
+  if (cached) return cached
+
   try {
     const { wttr, city } = await loadWttrForUserPosition()
-    return {
+    const bundle = {
       summary: locationWeatherFromWttr(wttr, city),
       detail: detailedWeatherFromWttr(wttr, city),
     }
+    writeCached(bundle)
+    return bundle
   } catch {
-    return {
+    const bundle = {
       summary: emptyWeather(),
       detail: emptyDetailedWeather(),
     }
+    writeCached(bundle)
+    return bundle
   }
 }
 

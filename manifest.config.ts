@@ -1,5 +1,19 @@
 import { defineManifest } from '@crxjs/vite-plugin'
 
+const hostPermissions = [
+  'https://api.unsplash.com/*',
+  'https://images.unsplash.com/*',
+  'https://wttr.in/*',
+  'https://nominatim.openstreetmap.org/*',
+  'https://www.google.com/*',
+  'https://www.googleapis.com/*',
+  'https://i.ytimg.com/*',
+  'https://www.youtube-nocookie.com/*',
+  'https://www.youtube.com/*',
+  /** Feeds RSS/Atom definidos em `news.json` / URL remoto. */
+  '<all_urls>',
+]
+
 export default defineManifest({
   manifest_version: 3,
   name: 'Home Browser',
@@ -27,17 +41,5 @@ export default defineManifest({
     type: 'module',
   },
   permissions: ['bookmarks'],
-  host_permissions: [
-    'https://api.unsplash.com/*',
-    'https://images.unsplash.com/*',
-    'https://wttr.in/*',
-    'https://nominatim.openstreetmap.org/*',
-    'https://www.google.com/*',
-    'https://www.googleapis.com/*',
-    'https://i.ytimg.com/*',
-    'https://www.youtube-nocookie.com/*',
-    'https://www.youtube.com/*',
-    /** Feeds RSS/Atom definidos em `news.json` / URL remoto. */
-    '<all_urls>',
-  ],
-})
+  host_permissions: hostPermissions,
+} as any)
