@@ -2,10 +2,13 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   hasYoutubeApiKey,
-  HOMEBROWSER_PLAYLIST_ID,
   loadLatestPlaylistVideo,
   type YoutubeLatestVideo,
 } from '../../lib/youtubePlaylistLatestCache'
+
+const props = defineProps<{
+  playlistId: string
+}>()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -28,7 +31,7 @@ onMounted(async () => {
     return
   }
   try {
-    const r = await loadLatestPlaylistVideo(HOMEBROWSER_PLAYLIST_ID)
+    const r = await loadLatestPlaylistVideo(props.playlistId)
     if (!r) {
       needsKey.value = true
       return

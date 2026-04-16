@@ -33,6 +33,10 @@ export function loadSuppressedFeedUrls(): SuppressedFeedEntry[] {
   return parse(localStorage.getItem(STORAGE_KEY))
 }
 
+export function replaceSuppressedFeedUrls(list: SuppressedFeedEntry[]): void {
+  saveSuppressed(list)
+}
+
 function saveSuppressed(list: SuppressedFeedEntry[]): void {
   if (typeof localStorage === 'undefined') return
   try {

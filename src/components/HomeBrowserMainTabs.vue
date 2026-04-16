@@ -16,7 +16,9 @@ import {
   orderNewsCategories,
 } from '../lib/newsCategoryOrder'
 import { mergeExtraFeedsIntoSchema } from '../lib/extraCategoryFeeds'
+import { applySelectedFeeds } from '../lib/selectedNewsFeeds'
 import { applySuppressedFeeds } from '../lib/suppressedFeedUrls'
+import { loadWidgetsConfig } from '../lib/widgetConfig'
 import {
   loadRemovedCategorySlugs,
   stripRemovedCategories,
@@ -44,6 +46,7 @@ const iconSvgFavorites =
 
 const feedsConfig = ref<NewsFeedsSchema | null>(null)
 const feedsError = ref<string | null>(null)
+const widgetsConfig = ref(loadWidgetsConfig())
 
 const articlesBySlug = ref<Record<string, NewsArticle[]>>({})
 const newsLoadingSlug = ref<string | null>(null)
@@ -124,7 +127,8 @@ function selectTab(tab: TabItem) {
 async function applyFeedsConfig(): Promise<void> {
   try {
     const base = await loadNewsFeedsConfig()
-    const merged = mergeNewsFeedsWithCustom(base, loadCustomFeeds())
+    const selectedBase = applySelectedFeeds(base)
+    const merged = mergeNewsFeedsWithCustom(selectedBase, loadCustomFeeds())
     const stripped = stripRemovedCategories(merged, loadRemovedCategorySlugs())
     const withExtras = mergeExtraFeedsIntoSchema(stripped)
     const afterSuppress = applySuppressedFeeds(withExtras)
@@ -141,6 +145,7 @@ async function applyFeedsConfig(): Promise<void> {
 }
 
 async function reloadFeedsConfig(selectSlug?: string): Promise<void> {
+  widgetsConfig.value = loadWidgetsConfig()
   await applyFeedsConfig()
   const cfg = feedsConfig.value
   if (!cfg?.categories.length) {
@@ -335,7 +340,10 @@ const masonryClass =
 
       <WidgetsColumn>
         <WeatherWidget :detail="props.weatherDetail" />
-        <YoutubePlaylistLatestWidget />
+        <YoutubePlaylistLatestWidget
+          v-if="widgetsConfig.youtubePlaylistId"
+          :playlist-id="widgetsConfig.youtubePlaylistId"
+        />
         <WikipediaOnThisDayWidget />
       </WidgetsColumn>
     </div>

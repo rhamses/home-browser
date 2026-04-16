@@ -1,7 +1,8 @@
 /**
  * Configuração de feeds de notícias.
- * Em produção: definir `VITE_NEWS_FEEDS_URL` com o URL do JSON.
- * Sem URL: usa o ficheiro mock `news.json` na raiz do repositório (bundled pelo Vite).
+ * Em produção: definir `VITE_NEWS_FEEDS_BASE_URL` com a base (ex.: CDN).
+ * O nome do ficheiro é fixo no código: `news.json`.
+ * Sem env: usa o ficheiro mock `news.json` na raiz do repositório (bundled pelo Vite).
  */
 
 import newsFeedsMock from '../../news.json'
@@ -74,14 +75,23 @@ function assertFeedsAlignWithCategories(schema: NewsFeedsSchema): void {
   }
 }
 
+const REMOTE_FEEDS_FILENAME = 'news.json'
+
 /** URL remota do JSON (ex.: CDN). Definir em `.env` para produção. */
 function remoteFeedsUrl(): string | undefined {
-  return import.meta.env.VITE_NEWS_FEEDS_URL?.trim() || undefined
+  // Back-compat: suporte ao env antigo, se existir.
+  const legacy = import.meta.env.VITE_NEWS_FEEDS_URL?.trim() || undefined
+  if (legacy) return legacy
+
+  const base = import.meta.env.VITE_NEWS_FEEDS_BASE_URL?.trim() || undefined
+  if (!base) return undefined
+  const clean = base.replace(/\/+$/, '')
+  return `${clean}/${REMOTE_FEEDS_FILENAME}`
 }
 
 /**
  * Carrega o schema de feeds.
- * - Com `VITE_NEWS_FEEDS_URL`: `fetch` ao URL (produção).
+ * - Com `VITE_NEWS_FEEDS_BASE_URL`: `fetch` a `<base>/news.json` (produção).
  * - Sem URL: usa `news.json` na raiz do projeto (mock, incluído no bundle).
  */
 export async function loadNewsFeedsConfig(): Promise<NewsFeedsSchema> {
