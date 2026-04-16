@@ -15,6 +15,7 @@ dist-ssr
 *.pem
 *.crx
 news.json
+release/
 
 # Editor directories and files
 .vscode/*

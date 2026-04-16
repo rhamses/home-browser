@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "package:chrome": "npm run build && node scripts/package-extension.mjs chrome",
+    "package:edge": "npm run build && node scripts/package-extension.mjs edge",
+    "package:firefox": "npm run build && node scripts/package-extension.mjs firefox",
+    "package:all": "npm run package:chrome && npm run package:edge && npm run package:firefox"
   },
   "description": "Extensão Chrome: Vue + Vite + Tailwind (CRXJS)",
   "dependencies": {
@@ -22,6 +26,7 @@
     "@types/node": "^24.12.2",
     "@vitejs/plugin-vue": "^6.0.5",
     "@vue/tsconfig": "^0.9.1",
+    "archiver": "^7.0.1",
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.2",
     "vite": "^8.0.4",

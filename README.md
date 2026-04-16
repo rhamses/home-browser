@@ -1,5 +1,43 @@
-# Vue 3 + TypeScript + Vite
+# Home Browser (Extensão)
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Extensão (MV3) com Vue + Vite + Tailwind.
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## Desenvolvimento
+
+```bash
+npm install
+npm run dev
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+Gera a pasta `dist/`.
+
+## Empacotar (Chrome / Edge / Firefox)
+
+Os comandos abaixo geram ficheiros em `release/`:
+
+```bash
+npm run package:chrome
+npm run package:edge
+npm run package:firefox
+```
+
+- **Chrome / Edge**: gera `.zip` (submeter na store ou carregar manualmente).
+- **Firefox**: gera `.xpi` (é um `.zip` com outra extensão).
+
+## Carregar manualmente
+
+- **Chrome / Edge**
+  - Vá a `chrome://extensions`
+  - Ative “Developer mode”
+  - “Load unpacked” → selecione `dist/`
+
+- **Firefox**
+  - Vá a `about:debugging#/runtime/this-firefox`
+  - “Load Temporary Add-on…” → selecione `dist/manifest.json`
+

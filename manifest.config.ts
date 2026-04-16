@@ -5,6 +5,16 @@ export default defineManifest({
   name: 'Home Browser',
   version: '1.0.0',
   description: 'Extensão Chrome com Vue, Vite e Tailwind',
+  /**
+   * Firefox (Gecko) metadata.
+   * Required to allow signing / install and to make updates stable.
+   */
+  browser_specific_settings: {
+    gecko: {
+      id: 'home-browser@rhamses',
+      strict_min_version: '109.0',
+    } as any,
+  } as any,
   action: {
     default_title: 'Home Browser',
     default_popup: 'src/popup.html',
