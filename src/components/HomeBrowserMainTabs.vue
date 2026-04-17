@@ -31,7 +31,19 @@ import type { DetailedWeather } from '../lib/weather'
 const props = defineProps<{
   weatherDetail: DetailedWeather
   favorites: FavoriteLink[]
+  /** Chave para forçar novo fetch do widget YouTube após limpar cache. */
+  youtubeWidgetRemountKey?: number
+  /** Slugs `games` | `chat` | `favorites` ocultos na barra de secções. */
+  hiddenFixedTabIds?: string[]
 }>()
+
+const hiddenFixedSet = computed(
+  () => new Set((props.hiddenFixedTabIds ?? []).filter(Boolean)),
+)
+
+const showGamesTab = computed(() => !hiddenFixedSet.value.has('games'))
+const showChatTab = computed(() => !hiddenFixedSet.value.has('chat'))
+const showFavoritesTab = computed(() => !hiddenFixedSet.value.has('favorites'))
 
 type TabItem = { id: string; label: string; iconSvg?: string }
 
@@ -80,13 +92,29 @@ const tabs = computed<TabItem[]>(() => {
       label: c.name,
       iconSvg: c.iconSvg,
     })) ?? []
-  return [
-    ...fromJson,
-    { id: 'games', label: 'Jogos', iconSvg: iconSvgGames },
-    { id: 'chat', label: 'Chat', iconSvg: iconSvgChat },
-    { id: 'favorites', label: 'Favoritos', iconSvg: iconSvgFavorites },
-  ]
+  const fixed: TabItem[] = []
+  if (showGamesTab.value) {
+    fixed.push({ id: 'games', label: 'Jogos', iconSvg: iconSvgGames })
+  }
+  if (showChatTab.value) {
+    fixed.push({ id: 'chat', label: 'Chat', iconSvg: iconSvgChat })
+  }
+  if (showFavoritesTab.value) {
+    fixed.push({ id: 'favorites', label: 'Favoritos', iconSvg: iconSvgFavorites })
+  }
+  return [...fromJson, ...fixed]
 })
+
+function firstVisibleTabId(): string {
+  const t = tabs.value
+  return t[0]?.id ?? ''
+}
+
+function ensureActiveTabVisible(): void {
+  const ids = tabs.value.map((x) => x.id)
+  if (!ids.length) return
+  if (!ids.includes(activeTab.value)) activeTab.value = ids[0]!
+}
 
 const activeTab = ref<string>('games')
 
@@ -148,34 +176,49 @@ async function reloadFeedsConfig(selectSlug?: string): Promise<void> {
   widgetsConfig.value = loadWidgetsConfig()
   await applyFeedsConfig()
   const cfg = feedsConfig.value
+  const ids = tabs.value.map((x) => x.id)
+
   if (!cfg?.categories.length) {
-    activeTab.value = 'games'
+    const pick = firstVisibleTabId()
+    if (pick) activeTab.value = pick
+    if (pick && isCategorySlug(pick)) await loadArticlesForCategory(pick)
+    ensureActiveTabVisible()
     return
   }
+
   if (selectSlug && isCategorySlug(selectSlug)) {
     activeTab.value = selectSlug
     await loadArticlesForCategory(selectSlug)
+    ensureActiveTabVisible()
     return
   }
-  if (activeTab.value && isCategorySlug(activeTab.value)) {
-    await loadArticlesForCategory(activeTab.value)
+
+  if (ids.includes(activeTab.value)) {
+    if (isCategorySlug(activeTab.value)) {
+      await loadArticlesForCategory(activeTab.value)
+    }
+    ensureActiveTabVisible()
     return
   }
-  const first = cfg.categories[0].slug
-  activeTab.value = first ?? 'games'
+
+  const first = cfg.categories[0]?.slug
+  activeTab.value = first ?? firstVisibleTabId()
   if (first) await loadArticlesForCategory(first)
+  ensureActiveTabVisible()
 }
 
 onMounted(async () => {
   await applyFeedsConfig()
   const cfg = feedsConfig.value
   if (!cfg?.categories.length) {
-    activeTab.value = 'games'
+    activeTab.value = firstVisibleTabId()
+    ensureActiveTabVisible()
     return
   }
-  const first = cfg.categories[0].slug
-  activeTab.value = first ?? 'games'
+  const first = cfg.categories[0]?.slug
+  activeTab.value = first ?? firstVisibleTabId()
   if (first) await loadArticlesForCategory(first)
+  ensureActiveTabVisible()
 })
 
 function getOrderableCategories(): {
@@ -281,8 +324,15 @@ const masonryClass =
           </div>
         </template>
 
-        <div v-show="activeTab === 'games'" id="panel-games" role="tabpanel" aria-labelledby="tab-games"
-          :aria-hidden="activeTab !== 'games'" class="min-h-48">
+        <div
+          v-if="showGamesTab"
+          v-show="activeTab === 'games'"
+          id="panel-games"
+          role="tabpanel"
+          aria-labelledby="tab-games"
+          :aria-hidden="activeTab !== 'games'"
+          class="min-h-48"
+        >
           <p class="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
             Sugestões em destaque — cada item abre numa nova aba quando tiveres links
             configurados.
@@ -304,8 +354,15 @@ const masonryClass =
           </ul>
         </div>
 
-        <div v-show="activeTab === 'chat'" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat"
-          :aria-hidden="activeTab !== 'chat'" class="min-h-48">
+        <div
+          v-if="showChatTab"
+          v-show="activeTab === 'chat'"
+          id="panel-chat"
+          role="tabpanel"
+          aria-labelledby="tab-chat"
+          :aria-hidden="activeTab !== 'chat'"
+          class="min-h-48"
+        >
           <article :class="cardArticle" class="mx-auto max-w-md text-center">
             <h3 class="font-semibold text-zinc-900 dark:text-white">Chat</h3>
             <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
@@ -319,6 +376,7 @@ const masonryClass =
         </div>
 
         <div
+          v-if="showFavoritesTab"
           v-show="activeTab === 'favorites'"
           id="panel-favorites"
           role="tabpanel"
@@ -342,6 +400,7 @@ const masonryClass =
         <WeatherWidget :detail="props.weatherDetail" />
         <YoutubePlaylistLatestWidget
           v-if="widgetsConfig.youtubePlaylistId"
+          :key="`${widgetsConfig.youtubePlaylistId}-${props.youtubeWidgetRemountKey ?? 0}`"
           :playlist-id="widgetsConfig.youtubePlaylistId"
         />
         <WikipediaOnThisDayWidget />

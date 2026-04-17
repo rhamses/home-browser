@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import FavoritesStrip from './components/FavoritesStrip.vue'
 import GoogleSearchBar from './components/GoogleSearchBar.vue'
 import NewTabHeaderBar from './components/NewTabHeaderBar.vue'
 import NewTabUnsplashFooter from './components/NewTabUnsplashFooter.vue'
 import HomeBrowserMainTabs from './components/HomeBrowserMainTabs.vue'
 import NewsCategoryOrderDialog from './components/NewsCategoryOrderDialog.vue'
+import FavoritesOrderDialog from './components/FavoritesOrderDialog.vue'
 import ManageCategoriesDialog from './components/ManageCategoriesDialog.vue'
 import ManageWidgetsDialog from './components/ManageWidgetsDialog.vue'
 import { loadBookmarksBarLinks, type FavoriteLink } from './lib/bookmarksBar'
@@ -43,6 +44,19 @@ import {
   applyHomeBrowserBackup,
   downloadHomeBrowserBackupJson,
 } from './lib/homeBrowserDataBackup'
+import { clearYoutubePlaylistLatestCache } from './lib/youtubePlaylistLatestCache'
+import {
+  clearHiddenFixedTabIds,
+  FIXED_MAIN_TAB_IDS,
+  loadHiddenFixedTabIds,
+  saveHiddenFixedTabIds,
+  type FixedMainTabId,
+} from './lib/fixedMainTabs'
+import {
+  loadFavoriteDisplayOrder,
+  saveFavoriteDisplayOrder,
+  sortFavoritesBySavedOrder,
+} from './lib/favoritesDisplayOrder'
 import { loadNaturePhotoWithCache } from './lib/unsplashCache'
 import type { NaturePhoto } from './lib/unsplash'
 import {
@@ -75,6 +89,7 @@ type OrderableCategoryRow = {
   slug: string
   name: string
   feedUrls: string[]
+  fixedMain?: boolean
 }
 
 type HomeTabsExposed = {
@@ -87,6 +102,27 @@ const categoryOrderDialogOpen = ref(false)
 const categoryOrderItems = ref<OrderableCategoryRow[]>([])
 /** Slugs presentes ao abrir o diálogo (para calcular remoções ao guardar). */
 const categoryOrderInitialSlugs = ref<string[]>([])
+
+const hiddenFixedTabSlugs = ref<FixedMainTabId[]>([...loadHiddenFixedTabIds()])
+
+const hasHiddenFixedTabs = computed(
+  () => hiddenFixedTabSlugs.value.length > 0,
+)
+
+function refreshHiddenFixedFromStorage() {
+  hiddenFixedTabSlugs.value = [...loadHiddenFixedTabIds()]
+}
+
+function buildCategoryOrderDialogItems(): OrderableCategoryRow[] {
+  const news = homeTabsRef.value?.getOrderableCategories?.() ?? []
+  const hidden = new Set(hiddenFixedTabSlugs.value)
+  const fixedRows: OrderableCategoryRow[] = [
+    { slug: 'games', name: 'Jogos', feedUrls: [], fixedMain: true },
+    { slug: 'chat', name: 'Chat', feedUrls: [], fixedMain: true },
+    { slug: 'favorites', name: 'Favoritos', feedUrls: [], fixedMain: true },
+  ].filter((r) => !hidden.has(r.slug as FixedMainTabId))
+  return [...news, ...fixedRows]
+}
 const headerNewsCategories = ref<{ slug: string; name: string }[]>([])
 
 const manageCategoriesOpen = ref(false)
@@ -98,10 +134,18 @@ const manageError = ref<string | null>(null)
 const manageWidgetsOpen = ref(false)
 const manageWidgetsInitial = ref<WidgetsConfig>(loadWidgetsConfig())
 
-const displayedFavorites = computed(() => [
-  ...localFavorites.value,
-  ...bookmarkBarLinks.value,
-])
+/** Incrementa após limpar cache do YouTube para remontar o widget. */
+const youtubeWidgetRemountKey = ref(0)
+/** Incrementa após importar backup para remontar abas/widgets. */
+const importEpoch = ref(0)
+
+const favoritesOrderDialogOpen = ref(false)
+const favoriteDisplayOrderIds = ref<string[]>(loadFavoriteDisplayOrder())
+
+const displayedFavorites = computed(() => {
+  const merged = [...localFavorites.value, ...bookmarkBarLinks.value]
+  return sortFavoritesBySavedOrder(merged, favoriteDisplayOrderIds.value)
+})
 
 let favoritesRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -160,10 +204,19 @@ function onAddExtraCategoryFeed(payload: { slug: string; feedUrl: string }) {
 }
 
 function onOpenCategoryOrder() {
-  const items = homeTabsRef.value?.getOrderableCategories?.() ?? []
-  categoryOrderItems.value = items
-  categoryOrderInitialSlugs.value = items.map((x) => x.slug)
+  const news = homeTabsRef.value?.getOrderableCategories?.() ?? []
+  categoryOrderInitialSlugs.value = news.map((x) => x.slug)
+  categoryOrderItems.value = buildCategoryOrderDialogItems()
   categoryOrderDialogOpen.value = true
+}
+
+function onOpenFavoritesOrder() {
+  favoritesOrderDialogOpen.value = true
+}
+
+function onSaveFavoriteOrder(ids: string[]) {
+  saveFavoriteDisplayOrder(ids)
+  favoriteDisplayOrderIds.value = [...ids]
 }
 
 async function onOpenManageCategories() {
@@ -202,8 +255,7 @@ function onSaveManageWidgets(cfg: WidgetsConfig) {
 async function refreshCategoryOrderItemsFromTabs(selectSlug?: string) {
   await homeTabsRef.value?.reloadFeedsConfig?.(selectSlug)
   if (categoryOrderDialogOpen.value) {
-    categoryOrderItems.value =
-      homeTabsRef.value?.getOrderableCategories?.() ?? []
+    categoryOrderItems.value = buildCategoryOrderDialogItems()
   }
 }
 
@@ -227,10 +279,29 @@ function onRemoveCategoryFeed(payload: { slug: string; url: string }) {
 }
 
 function onSaveCategoryOrder(slugs: string[]) {
-  const kept = new Set(slugs)
-  const removed = categoryOrderInitialSlugs.value.filter((s) => !kept.has(s))
+  const fixedSlugSet = new Set<string>([...FIXED_MAIN_TAB_IDS])
+  const newsOrder = slugs.filter((s) => !fixedSlugSet.has(s))
+  const keptNews = new Set(newsOrder)
+  const removed = categoryOrderInitialSlugs.value.filter((s) => !keptNews.has(s))
   persistCategoryDeletions(removed)
-  saveCategoryOrder(slugs)
+  saveCategoryOrder(newsOrder)
+
+  const visibleFixed = FIXED_MAIN_TAB_IDS.filter((id) => slugs.includes(id))
+  const hidden = new Set(
+    FIXED_MAIN_TAB_IDS.filter((id) => !visibleFixed.includes(id)),
+  )
+  saveHiddenFixedTabIds(hidden)
+  hiddenFixedTabSlugs.value = [...hidden]
+
+  void homeTabsRef.value?.reloadFeedsConfig?.()
+}
+
+function onRestoreFixedTabsFromDialog() {
+  clearHiddenFixedTabIds()
+  refreshHiddenFixedFromStorage()
+  if (categoryOrderDialogOpen.value) {
+    categoryOrderItems.value = buildCategoryOrderDialogItems()
+  }
   void homeTabsRef.value?.reloadFeedsConfig?.()
 }
 
@@ -238,7 +309,7 @@ function onExportHomeBrowserData() {
   downloadHomeBrowserBackupJson()
 }
 
-function onImportHomeBrowserData(payload: { text: string }) {
+async function onImportHomeBrowserData(payload: { text: string }) {
   let parsed: unknown
   try {
     parsed = JSON.parse(payload.text) as unknown
@@ -252,6 +323,16 @@ function onImportHomeBrowserData(payload: { text: string }) {
     return
   }
   localFavorites.value = loadLocalFavorites()
+  favoriteDisplayOrderIds.value = loadFavoriteDisplayOrder()
+  refreshHiddenFixedFromStorage()
+  manageWidgetsInitial.value = loadWidgetsConfig()
+  try {
+    bookmarkBarLinks.value = await loadBookmarksBarLinks()
+  } catch {
+    bookmarkBarLinks.value = []
+  }
+  importEpoch.value += 1
+  await nextTick()
   void homeTabsRef.value?.reloadFeedsConfig?.()
   void loadNaturePhotoWithCache()
     .then((p) => {
@@ -260,6 +341,14 @@ function onImportHomeBrowserData(payload: { text: string }) {
     })
     .catch(() => {
       photoError.value = true
+    })
+  void loadLocationWeatherBundle()
+    .then((weatherBundle) => {
+      locationWeather.value = weatherBundle.summary
+      weatherDetail.value = weatherBundle.detail
+    })
+    .catch(() => {
+      /* mantém valores atuais */
     })
 }
 
@@ -272,6 +361,8 @@ function onClearAppCache() {
   } catch {
     /* ignore */
   }
+  clearYoutubePlaylistLatestCache()
+  youtubeWidgetRemountKey.value += 1
 
   // Recarrega foto e tempo (sem bloquear UI).
   void loadNaturePhotoWithCache()
@@ -296,6 +387,8 @@ function onClearAppCache() {
 function removeLocalFavorite(id: string) {
   localFavorites.value = localFavorites.value.filter((x) => x.id !== id)
   persistLocalFavorites()
+  favoriteDisplayOrderIds.value = favoriteDisplayOrderIds.value.filter((x) => x !== id)
+  saveFavoriteDisplayOrder(favoriteDisplayOrderIds.value)
 }
 
 function clearLocalFavorites() {
@@ -363,6 +456,7 @@ onUnmounted(() => {
         @toggle-dark="toggleTheme" @add-favorite="onAddFavoriteFromHeader"
         @add-custom-feed="onAddCustomFeed" @sync-news-categories="onSyncNewsCategories"
         @add-extra-category-feed="onAddExtraCategoryFeed" @open-category-order="onOpenCategoryOrder"
+        @open-favorites-order="onOpenFavoritesOrder"
         @open-manage-categories="onOpenManageCategories"
         @open-manage-widgets="onOpenManageWidgets"
         @clear-app-cache="onClearAppCache"
@@ -372,8 +466,17 @@ onUnmounted(() => {
       <NewsCategoryOrderDialog
         v-model:open="categoryOrderDialogOpen"
         :items="categoryOrderItems"
+        :has-hidden-fixed-tabs="hasHiddenFixedTabs"
         @save="onSaveCategoryOrder"
         @remove-category-feed="onRemoveCategoryFeed"
+        @restore-fixed-tabs="onRestoreFixedTabsFromDialog"
+      />
+
+      <FavoritesOrderDialog
+        v-model:open="favoritesOrderDialogOpen"
+        :items="displayedFavorites"
+        @save="onSaveFavoriteOrder"
+        @remove-local="removeLocalFavorite"
       />
 
       <ManageCategoriesDialog
@@ -403,13 +506,16 @@ onUnmounted(() => {
 
         <GoogleSearchBar />
 
-        <FavoritesStrip :favorites="localFavorites" @remove-local="removeLocalFavorite" />
+        <FavoritesStrip :favorites="displayedFavorites" />
       </section>
 
       <HomeBrowserMainTabs
+        :key="importEpoch"
         ref="homeTabsRef"
         :weather-detail="weatherDetail"
         :favorites="displayedFavorites"
+        :youtube-widget-remount-key="youtubeWidgetRemountKey"
+        :hidden-fixed-tab-ids="hiddenFixedTabSlugs"
       />
       <NewTabUnsplashFooter v-if="naturePhoto" :photo="naturePhoto" />
     </div>

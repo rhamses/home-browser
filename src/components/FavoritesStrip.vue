@@ -5,10 +5,6 @@ import { isExtensionFavoriteId } from '../lib/localFavorites'
 defineProps<{
   favorites: FavoriteLink[]
 }>()
-
-const emit = defineEmits<{
-  'remove-local': [id: string]
-}>()
 </script>
 
 <template>
@@ -56,15 +52,6 @@ const emit = defineEmits<{
             {{ f.title }}
           </span>
         </a>
-        <button
-          v-if="isExtensionFavoriteId(f.id)"
-          type="button"
-          class="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-zinc-300/90 bg-white text-[10px] font-bold leading-none text-zinc-600 shadow-sm hover:bg-red-50 hover:text-red-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-red-950/50 dark:hover:text-red-400"
-          :aria-label="`Remover ${f.title}`"
-          @click.prevent.stop="emit('remove-local', f.id)"
-        >
-          ×
-        </button>
       </div>
     </div>
     <p

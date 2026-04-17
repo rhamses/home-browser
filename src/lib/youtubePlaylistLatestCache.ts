@@ -8,7 +8,17 @@
  */
 
 const CACHE_KEY = 'home-browser:yt-playlist-latest:v1'
-export const YOUTUBE_PLAYLIST_LATEST_TTL_MS = 30 * 60 * 1000
+/** Cache em disco no máximo 15 minutos antes de nova chamada à API. */
+export const YOUTUBE_PLAYLIST_LATEST_TTL_MS = 15 * 60 * 1000
+
+export function clearYoutubePlaylistLatestCache(): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.removeItem(CACHE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
 
 /** Playlist "homebrowser" (URL partilhada pelo utilizador). */
 export const HOMEBROWSER_PLAYLIST_ID =

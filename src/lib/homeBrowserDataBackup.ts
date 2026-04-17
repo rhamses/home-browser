@@ -1,6 +1,14 @@
 /**
- * Exportação / importação de dados locais (localStorage) prefixados por `home-browser`:
- * feeds, ordem/remoção de categorias, favoritos, caches (Unsplash, YouTube, Wikipedia), etc.
+ * Exportação / importação de dados locais (localStorage) cujas chaves começam por
+ * `home-browser` (regra: novas funcionalidades devem usar este prefixo para entrarem no backup).
+ *
+ * Inclui, entre outras: `home-browser-local-favorites`, `home-browser-custom-news-feeds:v1`,
+ * `home-browser-news-category-order:v1`, `home-browser-news-category-removed:v1`,
+ * `home-browser-feeds_selected:v1`, `home-browser-suppressed-feed-urls:v1`,
+ * `home-browser-extra-category-feeds:v1`, `home-browser-widgets-config:v1`,
+ * `home-browser-hidden-fixed-tabs:v1`, `home-browser-favorites-display-order:v1`,
+ * caches (`home-browser-unsplash-nature-cache`, `home-browser-weather-cache:v1`,
+ * `home-browser:yt-playlist-latest:v1`, `home-browser:wiki-otd:v1:*`, …).
  */
 
 export const HOME_BROWSER_STORAGE_KEY_PREFIX = 'home-browser'

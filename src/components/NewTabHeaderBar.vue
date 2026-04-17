@@ -25,6 +25,7 @@ const emit = defineEmits<{
   'open-manage-categories': []
   'open-manage-widgets': []
   'open-category-order': []
+  'open-favorites-order': []
   'clear-app-cache': []
   'export-home-browser-data': []
   'import-home-browser-data': [payload: { text: string }]
@@ -116,6 +117,14 @@ function openCategoryOrderDialog() {
   addExtraFeedPanelOpen.value = false
   menuOpen.value = false
   emit('open-category-order')
+}
+
+function openFavoritesOrderDialog() {
+  addFavoritePanelOpen.value = false
+  addNewCategoryPanelOpen.value = false
+  addExtraFeedPanelOpen.value = false
+  menuOpen.value = false
+  emit('open-favorites-order')
 }
 
 function openManageCategoriesDialog() {
@@ -252,7 +261,7 @@ onUnmounted(() => {
 
 <template>
   <header
-    class="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-zinc-200/80 bg-white/55 px-3 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/45 sm:px-4"
+    class="relative z-[100] flex h-11 shrink-0 items-center justify-between gap-3 border-b border-zinc-200/80 bg-white/55 px-3 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/45 sm:px-4"
   >
     <div ref="menuRootRef" class="relative shrink-0">
       <input
@@ -285,7 +294,7 @@ onUnmounted(() => {
       </button>
       <div
         v-show="menuOpen"
-        class="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-zinc-200/90 bg-white/95 py-1 shadow-xl backdrop-blur-md dark:border-zinc-700/90 dark:bg-zinc-900/95"
+        class="absolute left-0 top-full z-[110] mt-1 w-64 overflow-hidden rounded-xl border border-zinc-200/90 bg-white/95 py-1 shadow-xl backdrop-blur-md dark:border-zinc-700/90 dark:bg-zinc-900/95"
         role="menu"
         @click.stop
       >
@@ -373,6 +382,28 @@ onUnmounted(() => {
             />
           </svg>
           Ordene categorias
+        </button>
+        <button
+          type="button"
+          class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-zinc-800 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          role="menuitem"
+          @click="openFavoritesOrderDialog"
+        >
+          <svg
+            class="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M4 6h16M4 12h10M4 18h14"
+            />
+          </svg>
+          Ordene favoritos
         </button>
         <button
           type="button"

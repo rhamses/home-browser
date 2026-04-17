@@ -5,20 +5,29 @@ export type OrderableCategoryItem = {
   slug: string
   name: string
   feedUrls?: string[]
+  /** Secções fixas (Jogos, Chat, Favoritos): sem feeds; «apagar» oculta na barra. */
+  fixedMain?: boolean
 }
 
 const props = defineProps<{
   open: boolean
   items: OrderableCategoryItem[]
+  /** Mostra botão para voltar a mostrar secções fixas ocultas. */
+  hasHiddenFixedTabs?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
   save: [slugs: string[]]
   'remove-category-feed': [payload: { slug: string; url: string }]
+  'restore-fixed-tabs': []
 }>()
 
-type LocalRow = { slug: string; name: string; feedUrls: string[] }
+type LocalRow = { slug: string; name: string; feedUrls: string[]; fixedMain?: boolean }
+
+function rowFixed(r: LocalRow): boolean {
+  return r.fixedMain === true
+}
 
 const localRows = ref<LocalRow[]>([])
 const panelRef = ref<HTMLElement | null>(null)
@@ -43,6 +52,7 @@ watch(
         slug: x.slug,
         name: x.name,
         feedUrls: [...(x.feedUrls ?? [])],
+        fixedMain: x.fixedMain === true,
       }))
       await nextTick()
       panelRef.value?.focus()
@@ -54,17 +64,13 @@ watch(
   () => props.items,
   (items) => {
     if (!props.open) return
-    const bySlug = new Map(items.map((i) => [i.slug, i]))
-    localRows.value = localRows.value
-      .filter((r) => bySlug.has(r.slug))
-      .map((r) => {
-        const i = bySlug.get(r.slug)!
-        return {
-          slug: r.slug,
-          name: i.name,
-          feedUrls: [...(i.feedUrls ?? [])],
-        }
-      })
+    /** Sincronização completa com o pai (ex.: secções fixas após «Restaurar para o padrão inicial»). */
+    localRows.value = items.map((x) => ({
+      slug: x.slug,
+      name: x.name,
+      feedUrls: [...(x.feedUrls ?? [])],
+      fixedMain: x.fixedMain === true,
+    }))
   },
   { deep: true },
 )
@@ -92,16 +98,38 @@ function onMainEscape() {
 
 function moveUp(i: number) {
   if (i <= 0) return
-  const rows = [...localRows.value]
-  ;[rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]
-  localRows.value = rows
+  const rows = localRows.value
+  if (rowFixed(rows[i]!) && !rowFixed(rows[i - 1]!)) return
+  if (!rowFixed(rows[i]!) && rowFixed(rows[i - 1]!)) return
+  const next = [...rows]
+  ;[next[i - 1], next[i]] = [next[i]!, next[i - 1]!]
+  localRows.value = next
 }
 
 function moveDown(i: number) {
   if (i >= localRows.value.length - 1) return
-  const rows = [...localRows.value]
-  ;[rows[i], rows[i + 1]] = [rows[i + 1], rows[i]]
-  localRows.value = rows
+  const rows = localRows.value
+  if (!rowFixed(rows[i]!) && rowFixed(rows[i + 1]!)) return
+  if (rowFixed(rows[i]!) && !rowFixed(rows[i + 1]!)) return
+  const next = [...rows]
+  ;[next[i], next[i + 1]] = [next[i + 1]!, next[i]!]
+  localRows.value = next
+}
+
+function moveUpDisabled(i: number): boolean {
+  if (i <= 0) return true
+  const rows = localRows.value
+  if (rowFixed(rows[i]!) && !rowFixed(rows[i - 1]!)) return true
+  if (!rowFixed(rows[i]!) && rowFixed(rows[i - 1]!)) return true
+  return false
+}
+
+function moveDownDisabled(i: number): boolean {
+  if (i >= localRows.value.length - 1) return true
+  const rows = localRows.value
+  if (!rowFixed(rows[i]!) && rowFixed(rows[i + 1]!)) return true
+  if (rowFixed(rows[i]!) && !rowFixed(rows[i + 1]!)) return true
+  return false
 }
 
 function removeRow(i: number) {
@@ -125,6 +153,10 @@ function onSave() {
   )
   listFeedsOpen.value = false
   emit('update:open', false)
+}
+
+function onRestoreFixedTabs() {
+  emit('restore-fixed-tabs')
 }
 </script>
 
@@ -158,8 +190,9 @@ function onSave() {
             Ordenar categorias de notícias
           </h2>
           <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Use as setas para mudar a ordem; «apagar categoria» remove da lista até
-            guardar. Jogos e Chat ficam sempre no fim.
+            Use as setas para mudar a ordem. As secções Jogos, Chat e Favoritos ficam
+            depois das categorias de notícias; «apagar» nas notícias remove a categoria;
+            nas secções fixas, oculta-as na barra até restaurar.
           </p>
         </div>
 
@@ -168,7 +201,7 @@ function onSave() {
             v-if="open && !localRows.length"
             class="px-2 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400"
           >
-            Não há categorias de notícias para ordenar.
+            Nada para ordenar. Adicione feeds ou restaure as secções fixas.
           </p>
           <ul v-else class="space-y-1">
             <li
@@ -186,9 +219,10 @@ function onSave() {
                     class="text-left text-xs font-medium text-red-600 underline decoration-red-600/60 underline-offset-2 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                     @click="removeRow(i)"
                   >
-                    apagar categoria
+                    {{ row.fixedMain ? 'ocultar secção' : 'apagar categoria' }}
                   </button>
                   <button
+                    v-if="!row.fixedMain"
                     type="button"
                     class="text-left text-xs font-medium text-sky-600 underline decoration-sky-600/60 underline-offset-2 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
                     @click="openListFeeds(row)"
@@ -204,7 +238,7 @@ function onSave() {
                 <button
                   type="button"
                   class="rounded border border-zinc-300/90 bg-white px-1.5 py-0.5 text-xs text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                  :disabled="i === 0"
+                  :disabled="moveUpDisabled(i)"
                   aria-label="Mover para cima"
                   @click="moveUp(i)"
                 >
@@ -213,7 +247,7 @@ function onSave() {
                 <button
                   type="button"
                   class="rounded border border-zinc-300/90 bg-white px-1.5 py-0.5 text-xs text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                  :disabled="i >= localRows.length - 1"
+                  :disabled="moveDownDisabled(i)"
                   aria-label="Mover para baixo"
                   @click="moveDown(i)"
                 >
@@ -225,22 +259,33 @@ function onSave() {
         </div>
 
         <div
-          class="flex justify-end gap-2 border-t border-zinc-200/80 bg-zinc-50/80 px-3 py-3 dark:border-zinc-700/80 dark:bg-zinc-900/80"
+          class="flex flex-col gap-2 border-t border-zinc-200/80 bg-zinc-50/80 px-3 py-3 dark:border-zinc-700/80 dark:bg-zinc-900/80"
         >
           <button
+            v-if="hasHiddenFixedTabs"
             type="button"
-            class="rounded-lg border border-zinc-300/90 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            @click="close"
+            class="w-full rounded-lg border border-emerald-300/90 bg-emerald-50/90 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100 dark:hover:bg-emerald-900/50"
+            aria-label="Restaurar para o padrão inicial"
+            @click="onRestoreFixedTabs"
           >
-            Cancelar
+            Restaurar para o padrão inicial
           </button>
-          <button
-            type="button"
-            class="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-violet-500"
-            @click="onSave"
-          >
-            Salvar
-          </button>
+          <div class="flex justify-end gap-2">
+            <button
+              type="button"
+              class="rounded-lg border border-zinc-300/90 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+              @click="close"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-violet-500"
+              @click="onSave"
+            >
+              Salvar
+            </button>
+          </div>
         </div>
       </div>
 
